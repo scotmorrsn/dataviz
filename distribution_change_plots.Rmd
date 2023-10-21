@@ -1,0 +1,174 @@
+---
+title: "plot_examples"
+author: "Scot Morrison"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+
+## Load Libraries
+
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(beeswarm)
+library(gghalves)
+library(scales)
+library(ggthemes)
+library(ggdist)
+
+##Set theme 
+
+theme_set(theme_light())
+
+## set color pallet 
+
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+ 
+```
+
+#### First up all credit to Patrick Ward for his countless hours of feedback. I doubt I have anything that isn't influenced by him at this point. 
+
+Ok, so lets take a look at how we can create a raincloud plot and a variation that PW showed me using a half box and scatter
+
+First lets create a random data set
+
+```{r}
+
+n = 100
+mean = 5
+sd = 4
+pass_level = 5.5
+pop <- tibble(value = rnorm(n, mean, sd))
+
+pop <- pop %>% 
+  mutate(result = ifelse(pop$value > pass_level, "pass", "fail")) %>% 
+  mutate(post_value = rnorm(n, mean +15, sd)) %>% 
+  mutate(sub_id = 1:100) %>% 
+  select(sub_id, value, post_value, everything())
+
+pander::pander(head(pop))  ## visualize our data 
+
+```
+
+## Here is the boxplot with jittered points for sample 
+
+```{r fig.width=7,fig.height=8,fig.align='c'}
+rate <- pop %>%
+  count(result, "pass")
+
+pass_rate <- ((100 * rate[2,3]/(rate[2,3]+rate[1,3])))
+
+plot1 <- pop %>%
+  ggplot(aes(x = value, y = factor(0))) +
+  geom_boxplot(width = 0.2) +
+  geom_jitter(aes(x = value,
+                  fill = result),
+              position = position_nudge(y = -0.2),
+              shape = 21,
+              size = 6,
+              color = "black",
+              alpha = 0.5) +
+  geom_vline(aes(xintercept = pass_level), 
+             colour = "#E69F00",
+                 size = 0.5,
+             alpha = 0.5) +
+  scale_fill_manual(values = c("pass" = "#56B4E9", "fail" = "#D55E00"))+
+  labs(x = "Value",
+       y = "Count",
+       title = "Example Plot",
+       subtitle = "Because it looks cool",
+       ) +
+  annotate("text", x = -6, y = 1.5, label = paste("Pass Rate = ", round(pass_rate, 1), "% out of", (rate[2,3]+rate[1,3])), hjust = 0) +
+  theme_classic() +
+      theme(axis.text.y = element_text(),
+        axis.title.y = element_text(),
+        axis.text.x = element_text(size = 10, face = "bold"),
+        axis.title.x = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 18),
+        legend.position = "bottom")
+
+plot1
+  
+```
+
+## Same but with raincloud 
+
+```{r}
+plot_rain <- pop %>%
+      ggplot(aes(x = value, y = factor(0), fill = result)) +
+  stat_slab(aes(thickness = after_stat(pdf*n)),
+       scale = 0.7) +
+  stat_dotsinterval(side = "bottom", 
+        scale = 0.9, 
+       slab_size = NA)+
+  scale_fill_manual(values = c("pass" = "#E69F00", "fail" = "#56B4E9"))+
+  labs(x = "Value",
+       y = "Count",
+       title = "Example Raincloud Plot",
+       subtitle = "Because it looks cool",
+       ) +
+  # annotate("text", x = -6, y = 1.5, label = paste("Pass Rate = ", round(pass_rate, 1), "% out of", (rate[2,3]+rate[1,3])), hjust = 0) +
+  theme_classic() +
+      theme(axis.text.y = element_text(),
+        axis.title.y = element_text(),
+        axis.text.x = element_text(size = 10, face = "bold"),
+        axis.title.x = element_text(size = 12, face = "bold"),
+        plot.title = element_text(size = 18),
+        legend.position = "bottom")
+plot_rain
+```
+
+## Lets look at change score visualizations that let us still understand the variance in the populatation 
+
+```{r}
+
+## Pivot longer and refactor  
+pop_long <- pop %>% 
+  pivot_longer(cols = c(value, post_value),
+                names_to = "time",
+                values_to = "score")  %>% 
+                 mutate(time = factor(time, levels = c('value', 'post_value')))
+
+```
+
+```{r}
+## Show the change score 
+
+
+
+# Define custom labels
+custom_labels <- c('Pre', 'Post')
+
+pop_long %>%
+  ggplot(aes(x = time, y = score)) +
+  geom_line(aes(group = sub_id, color = sub_id),
+            size = 0.25) +
+  geom_point(aes(group = sub_id,
+                 color = sub_id),
+             alpha = 0.7,
+             size = 2) +
+  geom_half_violin(aes(x = time),
+                   data = pop_long %>% filter(time == 'post_value'),
+                   fill = "#E69F00",
+                   color = "#E69F00",
+                   side = 'r',
+                   alpha = 0.7) +
+  geom_half_violin(aes(x = time),
+                   data = pop_long %>% filter(time == 'value'),
+                   fill = "#009E73",
+                   color = "#009E73",
+                   side = 'l',
+                   alpha = 0.7) +
+  scale_x_discrete(labels = custom_labels) +
+  labs(x = "Time Period",
+       y = "VO2 max",
+       title = "VO2 Changes over time") +
+  theme(axis.text = element_text(face = "bold", size = 12),
+        axis.title = element_text(face = "bold", size = 12),
+        plot.title = element_text(size = 18),
+        legend.position = "false")
+```
+
