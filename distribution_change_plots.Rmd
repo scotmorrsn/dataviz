@@ -172,3 +172,88 @@ pop_long %>%
         legend.position = "false")
 ```
 
+#Updated change score visual 
+
+```{r}
+# Define a colorblind-friendly palette
+cb_palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# Calculate the overall change score
+overall_change <- dat_sliced %>%
+  group_by(time) %>%
+  summarize(mean_score = mean(score, na.rm = TRUE)) %>%
+  summarize(change = diff(mean_score)) %>%
+  pull(change)
+
+# Calculate individual change scores and join back to the main dataset
+dat_sliced <- dat_sliced %>%
+  group_by(sub_id) %>%
+  mutate(change = score[time == "Post"] - score[time == "Pre"]) %>%
+  ungroup()
+
+# Calculate quartiles for each time period
+quartiles <- dat_sliced %>%
+  group_by(time) %>%
+  summarize(q1 = quantile(score, 0.25),
+            q2 = quantile(score, 0.5),
+            q3 = quantile(score, 0.75))
+
+# Create the plot
+ggplot(dat_sliced, aes(x = time, y = score)) +
+  geom_half_boxplot(aes(x = time),
+                    data = dat_sliced %>% filter(time == 'Pre'),
+                    fill = "#56B4E9",
+                    color = "black",
+                    side = 'l',
+                    alpha = 0.7) +
+  geom_half_boxplot(aes(x = time),
+                    data = dat_sliced %>% filter(time == 'Post'),
+                    fill = "#E69F00",
+                    color = "black",
+                    side = 'r',
+                    alpha = 0.7) +
+  geom_line(aes(group = sub_id, color = change < 0),
+            alpha = 0.8,
+            size = 0.85) +
+  geom_point(aes(color = time),
+             size = 4,
+             alpha = 0.7) +
+  geom_text_repel(data = dat_sliced %>% 
+                    filter(time == "Post"),
+                  aes(label = sprintf("%s (%+.1f)", sub_id, change)),
+                  size = 3,
+                  nudge_x = 0.82,
+                  direction = "y",
+                  hjust = 0,
+                  segment.size = 0.2,
+                  segment.color = "gray50") +
+  scale_color_manual(values = c("Pre" = "#56B4E9", "Post" = "#E69F00", "TRUE" = "#D55E00", "FALSE" = "gray50")) +
+  scale_x_discrete(labels = c("Pre", "Post")) +
+  labs(x = "Time Period",
+       y = "Bat Speed (mph)",
+       title = "FYP 2024 Bat Speed Change Pre to Post", 
+       subtitle = paste("Overall Change:", round(overall_change, 2), "mph")) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 20, face = "bold"),
+    axis.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 14, face = "bold"),
+    axis.text = element_text(color = "black"),
+    panel.grid.major = element_line(color = "gray90"),
+    panel.grid.minor = element_blank()
+  ) +
+  # Add quartile labels
+  geom_text(data = quartiles, 
+            aes(x = time, y = q1, label = round(q1, 1)),
+            vjust = 1.5, hjust = ifelse(quartiles$time == "Pre", 1.2, -0.2), 
+            size = 3) +
+  geom_text(data = quartiles, 
+            aes(x = time, y = q2, label = round(q2, 1)),
+            vjust = 1.5, hjust = ifelse(quartiles$time == "Pre", 1.2, -0.2), 
+            size = 3) +
+  geom_text(data = quartiles, 
+            aes(x = time, y = q3, label = round(q3, 1)),
+            vjust = -0.5, hjust = ifelse(quartiles$time == "Pre", 1.2, -0.2), 
+            size = 3)
+```
